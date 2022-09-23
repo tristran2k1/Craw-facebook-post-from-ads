@@ -3,7 +3,12 @@ import crawl_page
 import os
 import json
 import asyncio
+import csv
+import boto3
+import pandas as pd
+from datetime import datetime
 from utils import FACEBOOK_CONVERTER
+
 
 async def find_post(ad_id, page_id):
     ad_url = f'https://www.facebook.com/ads/library/?id={ad_id}'
@@ -33,22 +38,46 @@ async def find_post(ad_id, page_id):
         result['post_id'] = post_id       
     
     return result
-        
-async def find_post_from_ads(ADS=None):
-    # ADS='[{"page_id":"100075993189667","ad_id":"1519947688358047"},{"page_id":"The-Landmark-Swanlake-Residences-Căn-Hộ-Khoáng-Nóng-Tại-Gia-101992878866213","ad_id":"1190205358138570"}]'
-    ads = json.loads(os.environ['ADS']) if ADS is None else json.loads(ADS)       
-    posts = []
 
+
+def load_ads(aws_access_key_id, aws_secret_access_key, ads_s3_path):
+    ads_s3_path = ads_s3_path.split('/')
+    bucket = ads_s3_path[2]
+    key = '/'.join(ads_s3_path[3:])
+    s3 = boto3.client("s3", aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
+    s3.download_file(Bucket=bucket, Key=key, Filename="ads.csv")
+    # read csv to dict
+    return pd.read_csv("ads.csv").to_dict(orient = "records")
+
+
+async def find_post_from_ads(ADS=None):
+    ads = load_ads(
+        os.environ['AWS_ACCESS_KEY_ID'],
+        os.environ['AWS_SECRET_ACCESS_KEY'],
+        os.environ['ADS_S3_PATH']
+    ) if ADS is None else json.loads(ADS)
+    posts = []
+    print('============================ ADS ==================================')
+    print(ads)
+    print('==============================================================')
     for ad in ads:
         post = await find_post(ad['ad_id'], ad['page_id'])
         print("{:<30} {:<30}".format(post['ad_id'], post['status']))
 
         if post['post_id'] is not None:
-            posts.append(post)
+            ad['post_id'] = post['post_id']
+            ad['page_id'] = post['page_id']
+            posts.append(ad)
+
+    # upload posts to s3
+    posts_df = pd.DataFrame(posts)
+    s3_output_path = f's3://ihz-sl/ad-posts/input-ads/posts_{datetime.now().strftime("%Y%m%d%H%M%S")}.csv'
+    posts_df.to_csv(s3_output_path, storage_options={'key': os.environ['AWS_ACCESS_KEY_ID'], 'secret': os.environ['AWS_SECRET_ACCESS_KEY']})
 
     # output the result to XCOM airflow
     with open('./airflow/xcom/return.json', 'w') as f:
-        json.dump(posts, f)    
+        json.dump({'s3_output_path': s3_output_path}, f)
+
 
 if __name__ == '__main__':
     asyncio.run(find_post_from_ads())

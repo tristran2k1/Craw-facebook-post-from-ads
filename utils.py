@@ -5,6 +5,9 @@ import time
 import re
 import json
 import requests
+import boto3
+import os
+
 
 def parse_datetime(text: str):
     settings = {
@@ -34,6 +37,19 @@ def remove_substring(content, removeText):
 async def count_element_exist(page, element):
     list_element = page.locator(element)
     return await list_element.count()
+
+async def logs_error(page):
+    timelog = datetime.now().strftime('%d-%m-%Y-%H-%M-%S')
+
+    html = await page.inner_html('body')
+    with open(f'logs/{timelog}.html', 'w', encoding='utf-8') as f:
+        f.write(html)
+    await page.screenshot(path=f'logs/{timelog}.png', full_page=True)
+
+    s3 = boto3.client('s3', aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'], aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'])
+    s3.upload_file(f'logs/{timelog}.html', 'ihz-sl', f'ad-posts/input-ads/{timelog}.html')
+    s3.upload_file(f'logs/{timelog}.png', 'ihz-sl', f'ad-posts/input-ads/{timelog}.png')
+    return None
 
 class UrlToUidConverter:
     def __init__(self) -> None:

@@ -1,3 +1,5 @@
 pandas==1.4.4
 requests
 dateparser
+boto3==1.24
+s3fs==2022.8.2
