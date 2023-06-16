@@ -3,6 +3,7 @@ This is a small project, collecting raw data:
 - Input: ads from facebook (facebook ads library)
 - Process: from ads -> post content -> search for posts on facebook (if any)
 - Output: post id
+  
 Goal: find potential customers in the real estate field from posts that run ads.
 
 ## Note
